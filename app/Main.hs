@@ -40,14 +40,8 @@ data ChatGPTResponse = ChatGPTResponse
 data Choice = Choice
     { message :: ChoiceMsg
     , index :: Int
-    , finishReason :: String
-    } deriving (Show,Generic)
-
-instance ToJSON Choice where
-    toJSON = genericToJSON $ aesonDrop 0 snakeCase
-instance FromJSON Choice where
-    parseJSON = genericParseJSON $ aesonDrop 0 snakeCase
-
+    , finish_reason :: String
+    } deriving (Show,Generic,ToJSON,FromJSON)
 
 
 
@@ -57,16 +51,10 @@ data ChoiceMsg = ChoiceMsg
     } deriving (Show,Generic,ToJSON, FromJSON)
 
 data Usage = Usage
-    { promptTokens :: Int
-    , completionTokens :: Int
-    , totalTokens :: Int
-    } deriving (Show,Generic)
-
-instance ToJSON Usage where
-    toJSON = genericToJSON $ aesonDrop 0 snakeCase
-instance FromJSON Usage where
-    parseJSON = genericParseJSON $ aesonDrop 0 snakeCase
-
+    { prompt_tokens :: Int
+    , completion_tokens :: Int
+    , total_tokens :: Int
+    } deriving (Show,Generic,ToJSON,FromJSON)
 
 
 messageBody :: String -> Data.Aeson.Array
@@ -100,18 +88,16 @@ askGPT msg = do
           --  $ setRequestBodyJSON (jsonBody msg)
             $ setRequestBodyLBS bodyStr
             $ requestUrl
-    -- print request
+    
     -- print bodyStr
     response <- httpLBS request
     let json = getResponseBody response
-    print json
     let eitherResult = (eitherDecode $ json) :: Either String ChatGPTResponse
     case eitherResult of
         Right result -> do
             let answer = content . message . Prelude.head . choices $ result  
             return $ Right $ pack answer
         Left error -> do
-            print error
             return $ Left $ L.toStrict . decodeUtf8 $ json
             
 
