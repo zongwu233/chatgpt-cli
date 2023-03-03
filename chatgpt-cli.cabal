@@ -31,6 +31,7 @@ executable chatgpt-cli
     -- other-extensions:
     build-depends:    base ^>=4.15.1.0,
                       aeson,
+                      aeson-casing,
                       http-conduit,
                       text,
                       utf8-string,
