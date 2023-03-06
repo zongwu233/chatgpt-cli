@@ -36,7 +36,8 @@ executable chatgpt-cli
                       text,
                       utf8-string,
                       bytestring,
-                      vector
+                      vector,
+                      dotenv
                       
     hs-source-dirs:   app
     default-language: Haskell2010

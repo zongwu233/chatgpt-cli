@@ -11,20 +11,27 @@ import Data.Maybe
 import Data.Text (unpack, head)
 import GHC.Generics
 import Data.Text.Lazy.Encoding
-import qualified Data.Text.Lazy  as  L
+import qualified Data.Text.Lazy  as  TL
+import qualified Data.Text.Lazy.Encoding    as TL
+
 import Data.ByteString.UTF8 as BSU  hiding(decode)    
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Aeson(object,Array)
-import Data.Vector
+import Data.Vector  hiding( (++) )
 import Data.Aeson.Casing
-
+import System.Environment
+import Configuration.Dotenv
+import System.IO
+import Data.Char (isSpace)
 
 
 url :: String
 url = "https://api.openai.com/v1/chat/completions"
 
-apiKey :: [ByteString]
-apiKey =  [ BSU.fromString $ "Bearer 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"]
+apiKey :: IO [ByteString]
+apiKey = do
+    key <- getEnv "api_key"
+    return [ BSU.fromString $ "Bearer " ++ key ]
 
 
 data ChatGPTResponse = ChatGPTResponse
@@ -77,14 +84,26 @@ jsonBody msg = Data.Aeson.object [
                    ]
            
 
-askGPT :: String -> IO (Either Text Text)
+checkAndAskGPT :: String -> IO()
+checkAndAskGPT msg = do
+    let blank = Prelude.all isSpace msg
+    if blank
+        then return ()
+        else askGPT msg
+
+askGPT :: String -> IO ()
 askGPT msg = do
+    key <- apiKey
+    proxyHost <- getEnv "proxy_host"
+    proxyPortStr <- getEnv "proxy_port"
+    let proxyPort :: Int
+        proxyPort = read proxyPortStr
     let requestUrl = parseRequest_ (url)
     let bodyStr = encode (jsonBody msg)
-    let request = setRequestProxy (Just (Proxy "127.0.0.1" 7890))
+    let request = setRequestProxy (Just (Proxy (BSU.fromString proxyHost) proxyPort ))
             $ setRequestMethod "POST"
             $ setRequestHeader "Content-Type" ["application/json"]
-            $ setRequestHeader "Authorization" apiKey
+            $ setRequestHeader "Authorization" key
           --  $ setRequestBodyJSON (jsonBody msg)
             $ setRequestBodyLBS bodyStr
             $ requestUrl
@@ -96,21 +115,31 @@ askGPT msg = do
     case eitherResult of
         Right result -> do
             let answer = content . message . Prelude.head . choices $ result  
-            return $ Right $ pack answer
+            putStrLn answer
+            
         Left error -> do
-            return $ Left $ L.toStrict . decodeUtf8 $ json
+            putStrLn $ TL.unpack . TL.decodeUtf8 $ json
+            
             
 
 
 main :: IO ()
-main = do
-    putStrLn "Type your question: "
-    input <- getLine
-    response <- askGPT input
-    case response of
-        Left err -> do
-            putStr "API error: "
-            putStrLn $ unpack err
-        Right resp -> do
-            putStr "AI response: "
-            putStrLn $ unpack resp
+main = do    
+    loadFile defaultConfig
+    until_ (== "quit") (readPrompt "chatgpt>>> ") checkAndAskGPT
+    
+
+
+until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
+until_ pred prompt action = do 
+   result <- prompt
+   if pred result 
+      then return ()
+      else action result >> until_ pred prompt action
+
+
+flushStr :: String -> IO ()
+flushStr str = putStr str >> hFlush stdout
+
+readPrompt :: String -> IO String
+readPrompt prompt = flushStr prompt >> getLine
